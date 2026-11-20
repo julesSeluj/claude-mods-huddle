@@ -1,0 +1,6 @@
+{
+  "name": "huddle",
+  "version": "0.1.0",
+  "description": "Panneau latéral montrant les agents Truckly au travail",
+  "types": "./types/index.d.ts"
+}
