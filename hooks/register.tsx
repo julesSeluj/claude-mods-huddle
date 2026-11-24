@@ -172,10 +172,14 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     const text = e.text ?? ''
-    if (!e.command && !e.isMeta && text.length > 5) {
+    const skip = e.command || e.isMeta || text.length <= 5
+      || /^<(task-notification|system-reminder|tool|function)/.test(text.trim())
+      || /^<[a-z_-]+>/.test(text.trim()) && text.includes('</')
+    if (!skip) {
+      const clean = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()
       const item: TodoItem = {
         id: nextTodoId(),
-        text: truncate(text.replace(/\n/g, ' '), 60),
+        text: truncate(clean, 60),
         turnId: e.turnId ?? '',
         status: 'pending',
         createdAt: Date.now(),
