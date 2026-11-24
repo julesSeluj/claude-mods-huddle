@@ -256,6 +256,7 @@ export const register: Register = on => {
           const style = etatStyle(p.etat)
           const agentQs = qByTicket[p.nom] ?? []
           const hasQ = agentQs.length > 0
+          const idle = p.etat === 'lot terminé' || p.etat === 'fermé'
           const borderCol = hasQ ? 'yellow' : style.color
           const isExp = exp[p.nom] === true
 
@@ -266,6 +267,7 @@ export const register: Register = on => {
               marginTop={1}
               borderStyle="round"
               borderColor={borderCol as any}
+              borderDimColor={idle && !hasQ}
               paddingLeft={1}
               paddingRight={1}
             >
@@ -278,13 +280,21 @@ export const register: Register = on => {
                   [p.nom]: !prev[p.nom],
                 }))}
               >
-                {agentIcon(p.nom, p.action)} <Text bold>{p.nom}</Text>
-                {p.action && <Text dimColor> · {truncate(p.action, 28)}</Text>}
+                {agentIcon(p.nom, p.action)} {idle
+                  ? <Text dimColor>{p.nom}</Text>
+                  : <Text bold>{p.nom}</Text>
+                }
+                {p.action && (idle
+                  ? <Text dimColor> · dernier : {truncate(p.action, 22)}</Text>
+                  : <Text dimColor> · {truncate(p.action, 28)}</Text>
+                )}
               </Button>
 
               {/* Row 2: subtitle */}
               {hasQ ? (
                 <Text color="yellow">asks a question</Text>
+              ) : idle ? (
+                <Text dimColor>{p.etat === 'lot terminé' ? '✓ lot terminé' : '⏹ fermé'}{p.depuis ? ` · ${p.depuis}` : ''}</Text>
               ) : (
                 <Box>
                   {p.ticket && <Text dimColor>#{p.ticket}</Text>}
@@ -292,8 +302,8 @@ export const register: Register = on => {
                 </Box>
               )}
 
-              {/* Row 3: progress bar */}
-              {p.enFile != null && p.enFile > 0 && (
+              {/* Row 3: progress bar (active only) */}
+              {!idle && p.enFile != null && p.enFile > 0 && (
                 <Box>
                   <Text color={style.color as any} bold>{progressBar(p.enFile, 8)}</Text>
                   <Text dimColor> file:{p.enFile}</Text>
