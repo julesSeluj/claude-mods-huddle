@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
-import type { HuddleData, ExpandedMap, TodoItem } from '../types'
+import type { HuddleData, ExpandedMap, TodoItem, SessionAgent } from '../types'
 
 const PANE = 'huddle'
 const SCRIPT = 'C:/Users/ldoma/Repogit/Truckly-wt-methode/scripts/postes/etat-postes.mjs'
@@ -14,6 +14,7 @@ const loading = atom({ plugin: 'huddle', key: 'loading' } as const, false, { sha
 const lastFetch = atom({ plugin: 'huddle', key: 'lastFetch' } as const, 0, { shape: 'lastFetch-1' })
 const answering = atom({ plugin: 'huddle', key: 'answering' } as const, null as string | null, { shape: 'answering-1' })
 const todos = atom({ plugin: 'huddle', key: 'todos' } as const, [] as TodoItem[], { shape: 'todos-1' })
+const sessionAgents = atom({ plugin: 'huddle', key: 'sessionAgents' } as const, [] as SessionAgent[], { shape: 'sessionAgents-1' })
 
 let todoCounter = 0
 function nextTodoId(): string {
@@ -117,6 +118,14 @@ function agentIcon(nom: string, action: string | null): string {
   return '🤖'
 }
 
+function elapsedSince(ts: number): string {
+  const sec = Math.floor((Date.now() - ts) / 1000)
+  if (sec < 60) return `${sec}s`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m`
+  return `${Math.floor(min / 60)}h${min % 60}m`
+}
+
 function progressBar(enFile: number | null, width: number): string {
   if (!enFile || enFile <= 0) return ''
   const filled = Math.min(enFile, width)
@@ -189,6 +198,23 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+    const agentId = (result as any)?.agentId
+    if (agentId) {
+      const agent: SessionAgent = {
+        id: agentId,
+        name: (e as any).name ?? (e as any).description ?? agentId,
+        description: (e as any).description ?? '',
+        type: (e as any).subagentType ?? 'agent',
+        status: 'running',
+        startedAt: Date.now(),
+      }
+      await update($, sessionAgents, list => [...list, agent])
+    }
+    return result
+  })
+
   on('turn.complete', async ($, e, next) => {
     const turnId = e.turnId ?? ''
     if (turnId) {
@@ -197,6 +223,17 @@ export const register: Register = on => {
           t.turnId === turnId && t.status === 'pending'
             ? { ...t, status: 'done' as const, doneAt: Date.now() }
             : t
+        )
+      )
+    }
+    const agentId = (e as any).agentId
+    if (agentId) {
+      const answer = truncate(String((e as any).answer ?? ''), 120)
+      await update($, sessionAgents, list =>
+        list.map(a =>
+          a.id === agentId && a.status === 'running'
+            ? { ...a, status: 'done' as const, doneAt: Date.now(), answer }
+            : a
         )
       )
     }
@@ -210,6 +247,7 @@ export const register: Register = on => {
     const isLoading = await read($, loading)
     const ans = await read($, answering)
     const todoList = await read($, todos)
+    const agents = await read($, sessionAgents)
     const cols = e.props?.bodyColumns ?? 40
 
     const postes = d?.postes ?? []
@@ -411,6 +449,63 @@ export const register: Register = on => {
             <Text color="red">⚠ File : {d.erreurFile}</Text>
           </Box>
         )}
+
+        {/* ── SESSION AGENTS ── */}
+        {agents.length > 0 && (() => {
+          const running = agents.filter(a => a.status === 'running')
+          const done = agents.filter(a => a.status === 'done')
+          return (
+            <Box flexDirection="column" marginTop={1}>
+              <Box>
+                <Text bold>Sous-agents</Text>
+                <Text dimColor> {running.length} actif{running.length > 1 ? 's' : ''}</Text>
+                {done.length > 0 && <Text dimColor> · {done.length} terminé{done.length > 1 ? 's' : ''}</Text>}
+              </Box>
+              {running.map(a => {
+                const isExp = exp[`sa-${a.id}`] === true
+                return (
+                  <Box key={`sa-${a.id}`} flexDirection="column" marginTop={1} borderStyle="round" borderColor="cyan" paddingLeft={1} paddingRight={1}>
+                    <Button
+                      key={`sa-toggle-${a.id}`}
+                      plain
+                      onPress={() => update($, expanded, prev => ({
+                        ...prev, [`sa-${a.id}`]: !prev[`sa-${a.id}`],
+                      }))}
+                    >
+                      <Text color="cyan">●</Text>
+                      <Text bold> {a.name}</Text>
+                      <Text dimColor> {isExp ? '▾' : '▸'}</Text>
+                    </Button>
+                    <Text dimColor>{a.type !== 'agent' ? a.type : ''} {elapsedSince(a.startedAt)}</Text>
+                    {isExp && a.description && (
+                      <Text dimColor>{a.description}</Text>
+                    )}
+                  </Box>
+                )
+              })}
+              {done.slice(-5).map(a => {
+                const isExp = exp[`sa-${a.id}`] === true
+                return (
+                  <Box key={`sa-${a.id}`} flexDirection="column" marginTop={1} borderStyle="round" borderDimColor paddingLeft={1} paddingRight={1}>
+                    <Button
+                      key={`sa-toggle-${a.id}`}
+                      plain
+                      onPress={() => update($, expanded, prev => ({
+                        ...prev, [`sa-${a.id}`]: !prev[`sa-${a.id}`],
+                      }))}
+                    >
+                      <Text dimColor>✓ {a.name}</Text>
+                      <Text dimColor> {isExp ? '▾' : '▸'}</Text>
+                    </Button>
+                    {isExp && a.answer && (
+                      <Text dimColor>{a.answer}</Text>
+                    )}
+                  </Box>
+                )
+              })}
+            </Box>
+          )
+        })()}
 
         {/* ── SÉPARATEUR ── */}
         <Box marginTop={1}>

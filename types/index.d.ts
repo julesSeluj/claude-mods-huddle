@@ -44,6 +44,17 @@ export type TodoItem = {
   doneAt?: number
 }
 
+export type SessionAgent = {
+  id: string
+  name: string
+  description: string
+  type: string
+  status: 'running' | 'done'
+  startedAt: number
+  doneAt?: number
+  answer?: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
     huddle: {
@@ -53,6 +64,7 @@ declare module 'claude-code' {
       lastFetch: Shaped<number>
       answering: Shaped<string | null>
       todos: Shaped<TodoItem[]>
+      sessionAgents: Shaped<SessionAgent[]>
     }
   }
 }
